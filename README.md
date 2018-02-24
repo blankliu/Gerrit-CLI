@@ -1,5 +1,7 @@
 # Gerrit-CLI
 
+#### A convenient tool which wraps several commands supported by Gerrit via its internal SSH daemon.
+
 ## Introduction
 
 - For purpose of leveraging Gerrit command line tools, this project wraps common Gerrit commands with a single Shell script named **gerrit-cli.sh**.
