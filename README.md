@@ -35,7 +35,8 @@
 - In order to use script **gerrit-cli.sh** anywhere within your Shell terminal, you need to put it into the System path.
 ```shell
 mkdir $HOME/.bin
-curl -Lo $HOME/.bin/gerrit-cli.sh https://raw.githubusercontent.com/BlankLiu/Gerrit-CLI/master/gerrit-cli.sh
+curl -Lo $HOME/.bin/gerrit-cli.sh https://raw.githubusercontent.com/blankliu/Gerrit-CLI/master/gerrit-cli.sh
+chmod a+x $HOME/.bin/gerrit-cli.sh
 sudo ln -sf $HOME/.bin/gerrit-cli.sh /usr/bin/gerrit-cli.sh
 ```
 
