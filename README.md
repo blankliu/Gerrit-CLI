@@ -86,7 +86,7 @@ CMD_FUNCTION_MAPPING["set-head"]="__set_head"
 ### 1. Show which Gerrit commands are wrapped by script **gerrit-cli.sh**
 
 ```shell
-gerrit-cli --help
+gerrit-cli.sh --help
 ```
 
 ### 2. Show usage of a Gerrit command using script **gerrit-cli.sh**

@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
 export PS4='+ [$(basename ${BASH_SOURCE})] [${LINENO}] '
+SCRIPT_NAME=$(basename $0)
 
 ERROR_CODE_CONFIG_NOT_FOUND=1
 ERROR_CODE_SSH_KEY_NOT_MATCH=2
@@ -59,8 +60,8 @@ function __print_usage_of_create_branch() {
     _RET_VALUE=0
     cat << EOU
 SYNOPSIS
-    1. gerrit-cli.sh create-branch -p <PROJECT> -b <BRANCH> -r <REVISION>
-    2. gerrit-cli.sh create-branch -f <BATCH_FILE>
+    1. $SCRIPT_NAME create-branch -p <PROJECT> -b <BRANCH> -r <REVISION>
+    2. $SCRIPT_NAME create-branch -f <BATCH_FILE>
 
 DESCRIPTION
     Creates new branches for projects with given revision.
@@ -94,10 +95,10 @@ OPTIONS
 EXAMPLES
     1. Creates a branch called 'dev' from branch 'master' for project
        'devops/ci'.
-       $ gerrit-cli.sh create-branch -p devops/ci -b dev -r master
+       $ $SCRIPT_NAME create-branch -p devops/ci -b dev -r master
 
     2. Creates new branches using batch file named 'batch.file'
-       $ gerrit-cli.sh create-branch -f batch.file
+       $ $SCRIPT_NAME create-branch -f batch.file
 EOU
 
     return $_RET_VALUE
@@ -186,7 +187,7 @@ function __print_usage_of_ls_user_refs() {
     _RET_VALUE=0
     cat << EOU
 SYNOPSIS
-    1. gerrit-cli.sh ls-user-refs -p <PROJECT> -u <USER> [-b] [-t]
+    1. $SCRIPT_NAME ls-user-refs -p <PROJECT> -u <USER> [-b] [-t]
 
 DESCRIPTION
     Display all refs (branches and tags) that the specified user can access.
@@ -211,10 +212,10 @@ OPTIONS
 
 EXAMPLES
     1. List all visible refs for user 'blankl' in project 'release/jenkins'
-       $ gerrit-cli.sh ls-users-refs -p release/jenkins -u blankl
+       $ $SCRIPT_NAME ls-users-refs -p release/jenkins -u blankl
 
     2. List all visible tags for user 'blankl' in project 'release/jenkins'
-       $ gerrit-cli.sh ls-users-refs -p release/jenkins -u blankl -t
+       $ $SCRIPT_NAME ls-users-refs -p release/jenkins -u blankl -t
 EOU
 
     return $_RET_VALUE
@@ -321,7 +322,7 @@ function __init_command_context() {
 
 function __print_cli_usage() {
     cat << EOU
-Usage: gerrit-cli.sh <SUB_COMMAND> [<args>]
+Usage: $SCRIPT_NAME <SUB_COMMAND> [<args>]
 
 These are sub-commands wrapped in the script. Each one has a corresponding
 Gerrit command whose official document can be found wihin a Gerrit release.
@@ -331,8 +332,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Lists all refs (branches and tags) accessible for a specified user.
 
 To show usage of a <SUB_COMMAND>, use following command:
-   gerrit-cli.sh help <SUB_COMMAND>
-   gerrit-cli.sh <SUB_COMMAND> --help
+   $SCRIPT_NAME help <SUB_COMMAND>
+   $SCRIPT_NAME <SUB_COMMAND> --help
 EOU
 }
 
