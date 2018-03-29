@@ -45,6 +45,7 @@ function __check_config() {
         ssh -p $_GERRIT_PORT $_GERRIT_USER@$_GERRIT_HOST 2> /dev/null || \
         if [[ "$?" -ne "127" ]]; then
             log_e "SSH private key not matched with user $_GERRIT_USER"
+            log_e "(Please check your config file: $_CONFIG_FILE)"
             _RET_VALUE=$ERROR_CODE_SSH_KEY_NOT_MATCH
         else
             GERRIT_CLI="ssh -p $_GERRIT_PORT $_GERRIT_USER@$_GERRIT_HOST gerrit"
@@ -364,7 +365,7 @@ function __run_cli() {
                 shift
                 eval ${CMD_FUNCTION_MAPPING["$_SUB_CMD"]} $*
             else
-                $_RET_VALUE=$?
+                _RET_VALUE=$?
             fi
         else
             if [[ "$_SUB_CMD" == "help" ]]; then
