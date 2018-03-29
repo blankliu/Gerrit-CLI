@@ -386,11 +386,88 @@ function __show_connections() {
     return $_RET_VALUE
 }
 
+function __print_usage_of_close_connection() {
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+    cat << EOU
+SYNOPSIS
+    1. $SCRIPT_NAME close-connection [--wait] SESSION_ID...
+
+DESCRIPTION
+    Closes the specified SSH connections by their session IDs.
+    Multiple session IDs must be separated by whitespaces.
+    By default, the operation of closing connections is done asynchronously.
+    Use option --wait to wait for connections to close.
+    An error message will be displayed if no connection with the specified
+    session ID is found.
+
+OPTIONS
+    --wait
+        Wait for connection to close before existing.
+
+    -h|--help
+        Show this usage document.
+
+EXAMPLES
+    1. Close connections whose session IDs are d1d5cb63 and 92beac6e
+       $ $SCRIPT_NAME close-connection --wait d1d5cb63 92beac6e
+EOU
+
+    return $_RET_VALUE
+}
+
+function __close_connection() {
+    local _SUB_CMD=
+    local _ASYNC_MODE=
+    local _SESSION_IDS=
+    local _CLI_CMD=
+    local _RET_VALUE=
+
+    _SUB_CMD="close-connection"
+    _ASYNC_MODE="true"
+    _RET_VALUE=0
+
+    _ARGS=$(getopt ${CMD_OPTION_MAPPING[$_SUB_CMD]} -- $@)
+    eval set -- "$_ARGS"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --wait)
+                _ASYNC_MODE="false"
+                ;;
+            -h|--help)
+                eval ${CMD_USAGE_MAPPING[$_SUB_CMD]}
+                return $_RET_VALUE
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+    _SESSION_IDS="$@"
+
+    _CLI_CMD="$GERRIT_CLI $_SUB_CMD"
+    if ! eval "$_ASYNC_MODE"; then
+        _CLI_CMD="$_CLI_CMD --wait"
+    fi
+
+    for I in $(echo "$_SESSION_IDS"); do
+        log_i "close SSH connection: $I"
+        eval "echo $_CLI_CMD $I" || true
+        echo
+    done
+
+    return $_RET_VALUE
+}
+
 function __init_command_context() {
     # Maps sub-command to its usage
     CMD_USAGE_MAPPING["create-branch"]="__print_usage_of_create_branch"
     CMD_USAGE_MAPPING["ls-user-refs"]="__print_usage_of_ls_user_refs"
     CMD_USAGE_MAPPING["show-connections"]="__print_usage_of_show_connections"
+    CMD_USAGE_MAPPING["close-connection"]="__print_usage_of_close_connection"
 
     # Maps sub-command to its options
     CMD_OPTION_MAPPING["create-branch"]="-o p:b:r:f:\
@@ -399,11 +476,14 @@ function __init_command_context() {
         -l project:,user:,branch-only,tag-only,help"
     CMD_OPTION_MAPPING["show-connections"]="-o nh\
         -l numeric,help"
+    CMD_OPTION_MAPPING["close-connection"]="-o h\
+        -l wait,help"
 
     # Maps sub-command to the implementation of its function
     CMD_FUNCTION_MAPPING["create-branch"]="__create_branch"
     CMD_FUNCTION_MAPPING["ls-user-refs"]="__ls_user_refs"
     CMD_FUNCTION_MAPPING["show-connections"]="__show_connections"
+    CMD_FUNCTION_MAPPING["close-connection"]="__close_connection"
 }
 
 function __print_cli_usage() {
@@ -418,6 +498,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Lists all refs (branches and tags) accessible for a specified user.
 3. show-connections
    Display active SSH connections of all clients.
+4. close-connection
+   Close the specified SSH connections.
 
 To show usage of a <SUB_COMMAND>, use following command:
    $SCRIPT_NAME help <SUB_COMMAND>
