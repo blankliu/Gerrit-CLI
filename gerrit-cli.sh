@@ -10,6 +10,7 @@ ERROR_CODE_BRANCH_CREATION_FAILURE=4
 ERROR_CODE_EXCLUSIVE_OPTIONS_PROVIDED=5
 ERROR_CODE_GERRIT_USER_NOT_FOUND=6
 ERROR_CODE_PROJECT_NOT_FOUND=7
+ERROR_CODE_INSUFFICIENT_PERMISSION=8
 
 declare -A CMD_USAGE_MAPPING
 declare -A CMD_OPTION_MAPPING
@@ -305,20 +306,104 @@ function __ls_user_refs() {
     return $_RET_VALUE
 }
 
+function __print_usage_of_show_connections() {
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+    cat << EOU
+SYNOPSIS
+    1. $SCRIPT_NAME show-connections [-n]
+
+DESCRIPTION
+    Presents a table of the active SSH connections, the users who are
+    currently connected to the internal server and performing an activity.
+
+    The table contains five columns:
+    1) Session
+       An unique session identifier of the connection on the server.
+    2) Start
+       The time (local to the server) the connection started.
+    3) Idle
+       The time since the last data transfer on this connection.
+    4) User
+       The username of the account that is authenticated on this connection.
+    5) Remote Host
+       The hostname or IP address of client on this connection.
+OPTIONS
+    -n|--numeric
+        Show numberic account ID instead of username.
+        Show client hostnames as IP addresses instead of DNS hostnames.
+
+    -h|--help
+        Show this usage document.
+
+EXAMPLES
+    1. List all active connections
+       $ $SCRIPT_NAME show-connections
+EOU
+
+    return $_RET_VALUE
+}
+
+function __show_connections() {
+    local _SUB_CMD=
+    local _NUMERIC_MODE=
+    local _CLI_CMD=
+    local _RET_VALUE=
+
+    _SUB_CMD="show-connections"
+    _NUMERIC_MODE="false"
+    _RET_VALUE=0
+
+    _ARGS=$(getopt ${CMD_OPTION_MAPPING[$_SUB_CMD]} -- $@)
+    eval set -- "$_ARGS"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -n|--ip)
+                _NUMERIC_MODE="true"
+                ;;
+            -h|--help)
+                eval ${CMD_USAGE_MAPPING[$_SUB_CMD]}
+                return $_RET_VALUE
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+
+    _CLI_CMD="$GERRIT_CLI $_SUB_CMD -w"
+    if eval "$_NUMERIC_MODE"; then
+        _CLI_CMD="$_CLI_CMD -n"
+    fi
+
+    if ! eval "$_CLI_CMD"; then
+        _RET_VALUE=$ERROR_CODE_INSUFFICIENT_PERMISSION
+    fi
+
+    return $_RET_VALUE
+}
+
 function __init_command_context() {
     # Maps sub-command to its usage
     CMD_USAGE_MAPPING["create-branch"]="__print_usage_of_create_branch"
     CMD_USAGE_MAPPING["ls-user-refs"]="__print_usage_of_ls_user_refs"
+    CMD_USAGE_MAPPING["show-connections"]="__print_usage_of_show_connections"
 
     # Maps sub-command to its options
     CMD_OPTION_MAPPING["create-branch"]="-o p:b:r:f:\
         -l project:,branch:,revision:,file:"
     CMD_OPTION_MAPPING["ls-user-refs"]="-o p:u:bth\
         -l project:,user:,branch-only,tag-only,help"
+    CMD_OPTION_MAPPING["show-connections"]="-o nh\
+        -l numeric,help"
 
     # Maps sub-command to the implementation of its function
     CMD_FUNCTION_MAPPING["create-branch"]="__create_branch"
     CMD_FUNCTION_MAPPING["ls-user-refs"]="__ls_user_refs"
+    CMD_FUNCTION_MAPPING["show-connections"]="__show_connections"
 }
 
 function __print_cli_usage() {
@@ -331,6 +416,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Creates a new branch for a project.
 2. ls-user-refs
    Lists all refs (branches and tags) accessible for a specified user.
+3. show-connections
+   Display active SSH connections of all clients.
 
 To show usage of a <SUB_COMMAND>, use following command:
    $SCRIPT_NAME help <SUB_COMMAND>
