@@ -525,12 +525,91 @@ function __close_connection() {
     return $_RET_VALUE
 }
 
+function __print_usage_of_show_queue() {
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+    cat << EOU
+SYNOPSIS
+    1. $SCRIPT_NAME show-queue
+
+DESCRIPTION
+    Presents a table of all activities the Gerrit daemon is performing
+    currently.
+    The table contains three columns.
+    1) Task
+       A unique identifier of a task
+    2) State
+       - If a task is running, it's blank.
+       - If a task has completed but has not yet been reaped, it's 'done'.
+       - If a task has been killed but has not yet halted or removed, it's 'killed'.
+       - If a task is ready to execute but is waiting for an idle thread, it's 'waiting'.
+       - Otherwise, it's the time (local to the server) that a task will begin execution.
+    3) Command
+       Short text description of a task.
+
+OPTIONS
+    -h|--help
+        Show this usage document.
+
+EXAMPLES
+    1. Show all activities
+       $ $SCRIPT_NAME show-queue
+EOU
+
+    return $_RET_VALUE
+}
+
+function __show_queue() {
+    local _SUB_CMD=
+    local _CLI_CMD=
+    local _RES_FILE=
+    local _RET_VALUE=
+
+    _SUB_CMD="show-queue"
+    _RET_VALUE=0
+
+    _ARGS=$(getopt ${CMD_OPTION_MAPPING[$_SUB_CMD]} -- $@)
+    eval set -- "$_ARGS"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                eval ${CMD_USAGE_MAPPING[$_SUB_CMD]}
+                return $_RET_VALUE
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+
+    __ascertain_server || return $?
+
+    _CLI_CMD="$GERRIT_CLI $_SUB_CMD -w"
+    _RES_FILE=$(mktemp -p "/tmp" --suffix ".tasks" "queue.XXX")
+    if eval "$_ASYNC_MODE" > "$_RES_FILE"; then
+        if [ -s "$_RES_FILE" ]; then
+            cat "$_RES_FILE"
+        else
+            log_i "the background work queue is empty"
+        fi
+    else
+        _RET_VALUE=$ERROR_CODE_INSUFFICIENT_PERMISSION
+    fi
+    rm -f "$_RES_FILE"
+
+    return $_RET_VALUE
+}
+
 function __init_command_context() {
     # Maps sub-command to its usage
     CMD_USAGE_MAPPING["create-branch"]="__print_usage_of_create_branch"
     CMD_USAGE_MAPPING["ls-user-refs"]="__print_usage_of_ls_user_refs"
     CMD_USAGE_MAPPING["show-connections"]="__print_usage_of_show_connections"
     CMD_USAGE_MAPPING["close-connection"]="__print_usage_of_close_connection"
+    CMD_USAGE_MAPPING["show-queue"]="__print_usage_of_show_queue"
 
     # Maps sub-command to its options
     CMD_OPTION_MAPPING["create-branch"]="-o p:b:r:f:\
@@ -541,12 +620,15 @@ function __init_command_context() {
         -l numeric,help"
     CMD_OPTION_MAPPING["close-connection"]="-o h\
         -l wait,help"
+    CMD_OPTION_MAPPING["show-queue"]="-o h\
+        -l help"
 
     # Maps sub-command to the implementation of its function
     CMD_FUNCTION_MAPPING["create-branch"]="__create_branch"
     CMD_FUNCTION_MAPPING["ls-user-refs"]="__ls_user_refs"
     CMD_FUNCTION_MAPPING["show-connections"]="__show_connections"
     CMD_FUNCTION_MAPPING["close-connection"]="__close_connection"
+    CMD_FUNCTION_MAPPING["show-queue"]="__show_queue"
 }
 
 function __print_cli_usage() {
@@ -563,6 +645,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Display active SSH connections of all clients.
 4. close-connection
    Close the specified SSH connections.
+5. show-queue
+   Display all activities of the background work queue.
 
 To show usage of a <SUB_COMMAND>, use following command:
    $SCRIPT_NAME help <SUB_COMMAND>
