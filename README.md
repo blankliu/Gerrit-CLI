@@ -21,14 +21,25 @@
 - Here is an example of config file **config.json**.
 ```json
 {
-    "host": "gerritro.sdesigns.com",
-    "port": 29418,
-    "user": "blankliu"
+    "server_pool": [
+        {
+            "host": "gerrit.sdesigns.com",
+            "port": 29418,
+            "user": "blankliu"
+        },
+        {
+            "host": "gerritro.sdesigns.com",
+            "port": 29418,
+            "user": "blankliu"
+        }
+    ]
 }
 ```
 
 > NOTE:
-> 1. Replaces values for those three fields with your own information.
+> 1. Each element of the array represents a Gerrit server.
+> 2. Replaces values of the three fields for each server with your own information.
+> 3. Multiple servers are supported, and you will be asked to choose one each time you run this CLI tool if multiple servers are found.
 
 ### 2. Put script **gerrit-cli.sh** into System path
 

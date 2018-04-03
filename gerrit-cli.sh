@@ -15,8 +15,13 @@ ERROR_CODE_INSUFFICIENT_PERMISSION=8
 declare -A CMD_USAGE_MAPPING
 declare -A CMD_OPTION_MAPPING
 declare -A CMD_FUNCTION_MAPPING
+
+declare -a GERRIT_HOSTS
+declare -a GERRIT_USERS
+declare -a GERRIT_PORTS
 GERRIT_CLI=
 
+CONFIG_FILE="$HOME/.gerrit/config.json"
 
 function log_i() {
     echo -e "Info : $*"
@@ -27,30 +32,80 @@ function log_e() {
 }
 
 function __check_config() {
-    local _CONFIG_FILE=
+    local _SERVER_COUNT=
+    local _JSON=
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        _RET_VALUE=$ERROR_CODE_CONFIG_NOT_FOUND
+    else
+        _SERVER_COUNT=$(cat "$CONFIG_FILE" | jq -r ".server_pool | length")
+        for I in $(seq 0 $((_SERVER_COUNT - 1))); do
+            _JSON=$(cat "$CONFIG_FILE" | jq ".server_pool | .[$I]")
+            GERRIT_HOSTS[$I]=$(echo "$_JSON" | jq -r ".host")
+            GERRIT_PORTS[$I]=$(echo "$_JSON" | jq -r ".port")
+            GERRIT_USERS[$I]=$(echo "$_JSON" | jq -r ".user")
+        done
+    fi
+
+    return $_RET_VALUE
+}
+
+function __ascertain_server() {
     local _GERRIT_HOST=
     local _GERRIT_PORT=
     local _GERRIT_USER=
+    local _INDEX=
+    local _CHOICE=
     local _RET_VALUE=
 
-    _CONFIG_FILE="$HOME/.gerrit/config.json"
     _RET_VALUE=0
 
-    if [[ ! -f "$_CONFIG_FILE" ]]; then
-        _RET_VALUE=$ERROR_CODE_CONFIG_NOT_FOUND
+    if [ ${#GERRIT_HOSTS[@]} -eq 1 ]; then
+        _GERRIT_HOST=${GERRIT_HOSTS[0]}
+        _GERRIT_PORT=${GERRIT_PORTS[0]}
+        _GERRIT_USER=${GERRIT_USERS[0]}
     else
-        _GERRIT_HOST=$(cat "$_CONFIG_FILE" | jq -r ".host")
-        _GERRIT_PORT=$(cat "$_CONFIG_FILE" | jq -r ".port")
-        _GERRIT_USER=$(cat "$_CONFIG_FILE" | jq -r ".user")
+        echo "As several Gerrit servers are provided, please choose one:"
+        _INDEX=0
+        for I in $(seq 1 ${#GERRIT_HOSTS[@]}); do
+            _INDEX=$((I - 1))
+            echo "$I. ${GERRIT_HOSTS[$_INDEX]}"
+        done
+        echo
+        while true; do
+            read -p "Your choice (the index number): " _CHOICE
+            if ! echo "$_CHOICE" | grep -qE "[0-9]+"; then
+                echo "Unacceptable choice: '$_CHOICE'"
+                echo
+                continue
+            fi
 
-        ssh -p $_GERRIT_PORT $_GERRIT_USER@$_GERRIT_HOST 2> /dev/null || \
-        if [[ "$?" -ne "127" ]]; then
-            log_e "SSH private key not matched with user $_GERRIT_USER"
-            log_e "(Please check your config file: $_CONFIG_FILE)"
-            _RET_VALUE=$ERROR_CODE_SSH_KEY_NOT_MATCH
-        else
-            GERRIT_CLI="ssh -p $_GERRIT_PORT $_GERRIT_USER@$_GERRIT_HOST gerrit"
-        fi
+            if [ "$_CHOICE" -ge 1 ] && \
+                [ "$_CHOICE" -le "${#GERRIT_HOSTS[@]}" ]; then
+                echo
+                break
+            else
+                echo "Unacceptable choice: '$_CHOICE'"
+                echo
+            fi
+        done
+
+        _CHOICE=$((_CHOICE - 1))
+        _GERRIT_HOST=${GERRIT_HOSTS[$_CHOICE]}
+        _GERRIT_PORT=${GERRIT_PORTS[$_CHOICE]}
+        _GERRIT_USER=${GERRIT_USERS[$_CHOICE]}
+    fi
+
+    ssh -p $_GERRIT_PORT $_GERRIT_USER@$_GERRIT_HOST 2> /dev/null || \
+    if [[ "$?" -ne "127" ]]; then
+        log_e "SSH private key not matched with user: $_GERRIT_USER"
+        log_e "Please check your config file: $CONFIG_FILE"
+        _RET_VALUE=$ERROR_CODE_SSH_KEY_NOT_MATCH
+    else
+        GERRIT_CLI="ssh -p $_GERRIT_PORT $_GERRIT_USER@$_GERRIT_HOST gerrit"
     fi
 
     return $_RET_VALUE
@@ -146,6 +201,8 @@ function __create_branch() {
         esac
         shift
     done
+
+    __ascertain_server || return $?
 
     if [[ ! -e "$_BATCH_FILE" ]]; then
         _CLI_CMD="$GERRIT_CLI $_SUB_CMD $_PROJECT $_BRANCH $_REVISION"
@@ -272,6 +329,8 @@ function __ls_user_refs() {
         shift
     done
 
+    __ascertain_server || return $?
+
     if eval "$_BRANCH_ONLY" && eval "$_TAG_ONLY"; then
         _RET_VALUE=$ERROR_CODE_EXCLUSIVE_OPTIONS_PROVIDED
         log_e "options -b|--branch-only and -t|--tag-only are exclusive."
@@ -374,6 +433,8 @@ function __show_connections() {
         shift
     done
 
+    __ascertain_server || return $?
+
     _CLI_CMD="$GERRIT_CLI $_SUB_CMD -w"
     if eval "$_NUMERIC_MODE"; then
         _CLI_CMD="$_CLI_CMD -n"
@@ -447,6 +508,8 @@ function __close_connection() {
         shift
     done
     _SESSION_IDS="$@"
+
+    __ascertain_server || return $?
 
     _CLI_CMD="$GERRIT_CLI $_SUB_CMD"
     if ! eval "$_ASYNC_MODE"; then
