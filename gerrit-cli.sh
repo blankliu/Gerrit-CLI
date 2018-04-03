@@ -603,6 +603,81 @@ function __show_queue() {
     return $_RET_VALUE
 }
 
+function __print_usage_of_kill() {
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+    cat << EOU
+SYNOPSIS
+    1. $SCRIPT_NAME kill <TASK_ID> ...
+
+DESCRIPTION
+    Cancels a scheduled task from the background work queue.
+
+OPTIONS
+    -h|--help
+        Show this usage document.
+
+EXAMPLES
+    1. Kill tasks whose IDs are d1d5cb63 and 92beac6e
+       $ $SCRIPT_NAME kill d1d5cb63 92beac6e
+EOU
+
+    return $_RET_VALUE
+}
+
+function __kill() {
+    local _SUB_CMD=
+    local _TASK_IDS=
+    local _CLI_CMD=
+    local _RES_FILE=
+    local _RET_VALUE=
+
+    _SUB_CMD="kill"
+    _RET_VALUE=0
+
+    if [[ $# -eq 0 ]]; then
+        eval "${CMD_USAGE_MAPPING[$_SUB_CMD]}"
+        return $_RET_VALUE
+    fi
+
+    _ARGS=$(getopt ${CMD_OPTION_MAPPING[$_SUB_CMD]} -- $@)
+    eval set -- "$_ARGS"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -h|--help)
+                eval ${CMD_USAGE_MAPPING[$_SUB_CMD]}
+                return $_RET_VALUE
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+    _TASK_IDS="$@"
+
+    __ascertain_server || return $?
+
+    _CLI_CMD="${GERRIT_CLI%" gerrit"} $_SUB_CMD"
+    _RES_FILE=$(mktemp -p "/tmp" --suffix ".task" "kill.XXX")
+    export -f log_e
+    for I in $(echo "$_TASK_IDS"); do
+        log_i "close task: $I"
+
+        eval "$_CLI_CMD $I" > "$_RES_FILE" 2>&1
+        if [ -s "$_RES_FILE" ]; then
+            cat "$_RES_FILE" | xargs -d "\n" -I {} bash -c 'log_e "$@"' _ {}
+        fi
+
+        echo
+    done
+    rm -rf "$_RES_FILE"
+
+    return $_RET_VALUE
+}
+
 function __init_command_context() {
     # Maps sub-command to its usage
     CMD_USAGE_MAPPING["create-branch"]="__print_usage_of_create_branch"
@@ -610,6 +685,7 @@ function __init_command_context() {
     CMD_USAGE_MAPPING["show-connections"]="__print_usage_of_show_connections"
     CMD_USAGE_MAPPING["close-connection"]="__print_usage_of_close_connection"
     CMD_USAGE_MAPPING["show-queue"]="__print_usage_of_show_queue"
+    CMD_USAGE_MAPPING["kill"]="__print_usage_of_kill"
 
     # Maps sub-command to its options
     CMD_OPTION_MAPPING["create-branch"]="-o p:b:r:f:\
@@ -622,6 +698,8 @@ function __init_command_context() {
         -l wait,help"
     CMD_OPTION_MAPPING["show-queue"]="-o h\
         -l help"
+    CMD_OPTION_MAPPING["kill"]="-o h\
+        -l help"
 
     # Maps sub-command to the implementation of its function
     CMD_FUNCTION_MAPPING["create-branch"]="__create_branch"
@@ -629,6 +707,7 @@ function __init_command_context() {
     CMD_FUNCTION_MAPPING["show-connections"]="__show_connections"
     CMD_FUNCTION_MAPPING["close-connection"]="__close_connection"
     CMD_FUNCTION_MAPPING["show-queue"]="__show_queue"
+    CMD_FUNCTION_MAPPING["kill"]="__kill"
 }
 
 function __print_cli_usage() {
@@ -647,6 +726,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Close the specified SSH connections.
 5. show-queue
    Display all activities of the background work queue.
+6. kill
+   Cancel or abort a background task
 
 To show usage of a <SUB_COMMAND>, use following command:
    $SCRIPT_NAME help <SUB_COMMAND>
