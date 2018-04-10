@@ -11,6 +11,7 @@ ERROR_CODE_EXCLUSIVE_OPTIONS_PROVIDED=5
 ERROR_CODE_GERRIT_USER_NOT_FOUND=6
 ERROR_CODE_PROJECT_NOT_FOUND=7
 ERROR_CODE_INSUFFICIENT_PERMISSION=8
+ERROR_CODE_INVALID_CACHE_NAME_FOUND=9
 
 declare -A CMD_USAGE_MAPPING
 declare -A CMD_OPTION_MAPPING
@@ -706,6 +707,133 @@ function __kill() {
     return $_RET_VALUE
 }
 
+function __print_usage_of_flush_caches() {
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+    cat << EOU
+SYNOPSIS
+    1. $SCRIPT_NAME flush-caches [-l|--list]
+    2. $SCRIPT_NAME flush-caches [-a|--all]
+    3. $SCRIPT_NAME flush-caches [-c|--cache <CACHE_NAME>]
+
+DESCRIPTION
+    Clears in-memory caches, forcing Gerrit to reconsult the ground truth when
+    it needs the information again.
+
+    The 1st format
+        Shows a list of names of all caches.
+
+    The 2nd format
+        Flushes all known caches except cache "web_sessions".
+
+    The 3rd format
+        Flushes a specified cache called <CACHE_NAME>.
+
+OPTIONS
+    -a|--all
+        Specify it to flush all known caches.
+
+    -l|--list
+        Specify it to show a list of of all known caches.
+
+    -c|--cache <CACHE_NAME>
+        Specify the name of a cache.
+
+    -h|--help
+        Show this usage document.
+
+EXAMPLES
+    1. List all caches
+       $ $SCRIPT_NAME flush-caches --list
+
+    2. Flush cache "web_sessions", forcing all users to sign-in again
+       $ $SCRIPT_NAME flush-caches --cache web_sessions
+
+    3. Flush all in-memory caches, forcing them to recompute
+       $ $SCRIPT_NAME flush-caches --all
+EOU
+
+    return $_RET_VALUE
+}
+
+function __flush_caches() {
+    local _SUB_CMD=
+    local _ACTION=
+    local _CACHE=
+    local _CLI_CMD=
+    local _RES_FILE=
+    local _RET_VALUE=
+
+    _SUB_CMD="flush-caches"
+    _RET_VALUE=0
+
+    if [[ $# -eq 0 ]]; then
+        eval "${CMD_USAGE_MAPPING[$_SUB_CMD]}"
+        return $_RET_VALUE
+    fi
+
+    _ARGS=$(getopt ${CMD_OPTION_MAPPING[$_SUB_CMD]} -- $@)
+    eval set -- "$_ARGS"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -a|--all)
+                _ACTION="flush"
+                _CACHE=""
+                ;;
+            -l|--list)
+                _ACTION="show"
+                ;;
+            -c|--cache)
+                _ACTION="flush"
+                _CACHE="$2"
+                ;;
+            -h|--help)
+                eval ${CMD_USAGE_MAPPING[$_SUB_CMD]}
+                return $_RET_VALUE
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+
+    __ascertain_server || return $?
+
+    _CLI_CMD="$GERRIT_CLI $_SUB_CMD"
+    case "$_ACTION" in
+        show)
+            _CLI_CMD="$_CLI_CMD --list"
+            eval "$_CLI_CMD"
+            ;;
+        flush)
+            if [ -z "$_CACHE" ]; then
+                _CLI_CMD="$_CLI_CMD --all"
+            else
+                _RES_FILE=$(mktemp -p "/tmp" --suffix ".list" "cache.XXX")
+                eval "$_CLI_CMD --list" > "$_RES_FILE" 2>&1
+                if grep -q "^$_CACHE$" "$_RES_FILE"; then
+                    _CLI_CMD="$_CLI_CMD --cache $_CACHE"
+                else
+                    log_e "invalid cache name: $_CACHE"
+                    _RET_VALUE=$ERROR_CODE_INVALID_CACHE_NAME_FOUND
+                fi
+                rm -f "$_RES_FILE"
+            fi
+
+            if [ "$_RET_VALUE" -eq 0 ]; then
+                if eval "$_CLI_CMD"; then
+                    log_i "cache flushed successfully"
+                fi
+            fi
+            ;;
+    esac
+
+    return $_RET_VALUE
+}
+
 function __init_command_context() {
     # Maps sub-command to its usage
     CMD_USAGE_MAPPING["create-branch"]="__print_usage_of_create_branch"
@@ -714,6 +842,7 @@ function __init_command_context() {
     CMD_USAGE_MAPPING["close-connection"]="__print_usage_of_close_connection"
     CMD_USAGE_MAPPING["show-queue"]="__print_usage_of_show_queue"
     CMD_USAGE_MAPPING["kill"]="__print_usage_of_kill"
+    CMD_USAGE_MAPPING["flush-caches"]="__print_usage_of_flush_caches"
 
     # Maps sub-command to its options
     CMD_OPTION_MAPPING["create-branch"]="-o p:b:r:f:\
@@ -728,6 +857,8 @@ function __init_command_context() {
         -l help"
     CMD_OPTION_MAPPING["kill"]="-o h\
         -l help"
+    CMD_OPTION_MAPPING["flush-caches"]="-o alc:h\
+        -l all,list,cache:,help"
 
     # Maps sub-command to the implementation of its function
     CMD_FUNCTION_MAPPING["create-branch"]="__create_branch"
@@ -736,6 +867,7 @@ function __init_command_context() {
     CMD_FUNCTION_MAPPING["close-connection"]="__close_connection"
     CMD_FUNCTION_MAPPING["show-queue"]="__show_queue"
     CMD_FUNCTION_MAPPING["kill"]="__kill"
+    CMD_FUNCTION_MAPPING["flush-caches"]="__flush_caches"
 }
 
 function __print_cli_usage() {
@@ -756,6 +888,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Display all activities of the background work queue.
 6. kill
    Cancel or abort a background task
+7. flush-caches
+   Flush server caches from memory
 
 To show usage of a <SUB_COMMAND>, use following command:
    $SCRIPT_NAME help <SUB_COMMAND>
