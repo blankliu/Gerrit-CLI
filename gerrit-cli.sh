@@ -168,7 +168,12 @@ function __create_branch() {
     local _REVISION=
     local _BATCH_FILE=
     local _CLI_CMD=
+    local _REV_MAPPING=
+    local _LEN_MAX_P=
+    local _LEN_MAX_B=
     local _RET_VALUE=
+
+    declare -A _REV_MAPPING
 
     _SUB_CMD="create-branch"
     _RET_VALUE=0
@@ -206,8 +211,7 @@ function __create_branch() {
 
     if [[ ! -e "$_BATCH_FILE" ]]; then
         _CLI_CMD="$GERRIT_CLI $_SUB_CMD $_PROJECT $_BRANCH $_REVISION"
-        log_i "creating branch '$_BRANCH' for project '$_PROJECT'"\
-            "using revision '$_REVISION'"
+        log_i "branch creation combo: ($_PROJECT, $_BRANCH, $_REVISION)"
 
         if eval "$_CLI_CMD"; then
             log_i "new branch created: $_BRANCH"
@@ -216,25 +220,49 @@ function __create_branch() {
             _RET_VALUE=$ERROR_CODE_BRANCH_CREATION_FAILURE
         fi
     else
-        #set -x
+        # Length of word "Project": 7
+        # Length of word "Branch": 6
+        _LEN_MAX_P=7
+        _LEN_MAX_B=6
         while read _PROJECT _BRANCH _REVISION; do
-            _CLI_CMD="$GERRIT_CLI $_SUB_CMD $_PROJECT $_BRANCH $_REVISION"
-            log_i "creating branch '$_BRANCH' for project '$_PROJECT'"\
-                "using revision '$_REVISION'"
+            log_i "branch creation info: ($_PROJECT, $_BRANCH, $_REVISION)"
+
+            if [ "${#_PROJECT}" -gt "$_LEN_MAX_P" ]; then
+                _LEN_MAX_P=${#_PROJECT}
+            fi
+
+            if [ "${#_BRANCH}" -gt "$_LEN_MAX_B" ]; then
+                _LEN_MAX_B=${#_BRANCH}
+            fi
 
             # As ssh reads from standard input, it eats all remaining lines,
             # there are two ways to avoid this issue:
             # 1. redirects standard input to null bucket for ssh
             # 2. uses option -n for ssh
+            _CLI_CMD="$GERRIT_CLI $_SUB_CMD $_PROJECT $_BRANCH $_REVISION"
             if eval "$_CLI_CMD" < /dev/null; then
+                _REV_MAPPING["${_PROJECT}${_BRANCH}"]="$_REVISION"
                 log_i "new branch created: $_BRANCH"
             else
+                _REV_MAPPING["${_PROJECT}${_BRANCH}"]="????"
                 log_e "fail to create new branch: $_BRANCH"
                 _RET_VALUE=$ERROR_CODE_BRANCH_CREATION_FAILURE
             fi
 
             echo
         done < "$_BATCH_FILE"
+
+        printf "%$((_LEN_MAX_P + _LEN_MAX_B + 4 + 40))s\n" "-" | sed "s| |-|g"
+        printf "%-${_LEN_MAX_P}s  %-${_LEN_MAX_B}s  %-s\n" \
+                "Project" "Branch" "Revision"
+        printf "%$((_LEN_MAX_P + _LEN_MAX_B + 4 + 40))s\n" "-" | sed "s| |-|g"
+        while read _PROJECT _BRANCH _REVISION; do
+            printf "%-${_LEN_MAX_P}s  %-${_LEN_MAX_B}s  %-s\n" \
+                    "$_PROJECT" \
+                    "$_BRANCH" \
+                    "${_REV_MAPPING[${_PROJECT}${_BRANCH}]}"
+        done < "$_BATCH_FILE"
+        printf "%$((_LEN_MAX_P + _LEN_MAX_B + 4 + 40))s\n" "-" | sed "s| |-|g"
     fi
 
     return $_RET_VALUE
