@@ -834,6 +834,91 @@ function __flush_caches() {
     return $_RET_VALUE
 }
 
+function __print_usage_of_show_caches() {
+    local _RET_VALUE=
+
+    _RET_VALUE=0
+    cat << EOU
+SYNOPSIS
+    $SCRIPT_NAME show-caches [-g|--gc] [-j|--show-jvm] [-t|--show-threads]
+
+DESCRIPTION
+    Displays statistics about the size and hit ratio of in-memory caches.
+
+OPTIONS
+    -g|--gc
+        Specify it to request Java garbage collection before displaying
+        information about the Java memory heap.
+
+    -j|--show-jvm
+        Specify it to list the name and version of the Java virtual machine,
+        host OS, and other details about the environment that Gerrit server is
+        running in.
+
+    -t|--show-threads
+        Specify it to show the detailed counts for Gerrit specific threads.
+
+    -h|--help
+        Show this usage document.
+
+EXAMPLES
+    1. Display all caches along with JVM information and thread counts
+       $ $SCRIPT_NAME show-caches --show-jvm --show-threads
+EOU
+
+    return $_RET_VALUE
+}
+
+function __show_caches() {
+    local _SUB_CMD=
+    local _SUB_CMD_OPTIONS=
+    local _CLI_CMD=
+    local _RES_FILE=
+    local _RET_VALUE=
+
+    _SUB_CMD="show-caches"
+    _RET_VALUE=0
+
+    if [[ $# -eq 0 ]]; then
+        eval "${CMD_USAGE_MAPPING[$_SUB_CMD]}"
+        return $_RET_VALUE
+    fi
+
+    _ARGS=$(getopt ${CMD_OPTION_MAPPING[$_SUB_CMD]} -- $@)
+    eval set -- "$_ARGS"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -g|--gc)
+                _SUB_CMD_OPTIONS="$_SUB_CMD_OPTIONS --gc"
+                ;;
+            -j|--show-jvm)
+                _SUB_CMD_OPTIONS="$_SUB_CMD_OPTIONS --show-jvm"
+                ;;
+            -t|--show-thread)
+                _SUB_CMD_OPTIONS="$_SUB_CMD_OPTIONS --show-threads"
+                ;;
+            -h|--help)
+                eval ${CMD_USAGE_MAPPING[$_SUB_CMD]}
+                return $_RET_VALUE
+                ;;
+            --)
+                shift
+                break
+                ;;
+        esac
+        shift
+    done
+
+    __ascertain_server || return $?
+
+    _CLI_CMD="$GERRIT_CLI $_SUB_CMD $_SUB_CMD_OPTIONS"
+    if ! eval "$_CLI_CMD"; then
+        _RET_VALUE=$ERROR_CODE_INSUFFICIENT_PERMISSION
+    fi
+
+    return $_RET_VALUE
+}
+
 function __init_command_context() {
     # Maps sub-command to its usage
     CMD_USAGE_MAPPING["create-branch"]="__print_usage_of_create_branch"
@@ -843,6 +928,7 @@ function __init_command_context() {
     CMD_USAGE_MAPPING["show-queue"]="__print_usage_of_show_queue"
     CMD_USAGE_MAPPING["kill"]="__print_usage_of_kill"
     CMD_USAGE_MAPPING["flush-caches"]="__print_usage_of_flush_caches"
+    CMD_USAGE_MAPPING["show-caches"]="__print_usage_of_show_caches"
 
     # Maps sub-command to its options
     CMD_OPTION_MAPPING["create-branch"]="-o p:b:r:f:\
@@ -859,6 +945,8 @@ function __init_command_context() {
         -l help"
     CMD_OPTION_MAPPING["flush-caches"]="-o alc:h\
         -l all,list,cache:,help"
+    CMD_OPTION_MAPPING["show-caches"]="-o jtgh\
+        -l show-jvm,show-threads,gc,help"
 
     # Maps sub-command to the implementation of its function
     CMD_FUNCTION_MAPPING["create-branch"]="__create_branch"
@@ -868,6 +956,7 @@ function __init_command_context() {
     CMD_FUNCTION_MAPPING["show-queue"]="__show_queue"
     CMD_FUNCTION_MAPPING["kill"]="__kill"
     CMD_FUNCTION_MAPPING["flush-caches"]="__flush_caches"
+    CMD_FUNCTION_MAPPING["show-caches"]="__show_caches"
 }
 
 function __print_cli_usage() {
@@ -890,6 +979,8 @@ Gerrit command whose official document can be found wihin a Gerrit release.
    Cancel or abort a background task
 7. flush-caches
    Flush server caches from memory
+8. show-caches
+   Display statistics about the size and hit ratio of in-memory caches.
 
 To show usage of a <SUB_COMMAND>, use following command:
    $SCRIPT_NAME help <SUB_COMMAND>
